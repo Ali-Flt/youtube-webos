@@ -107,7 +107,10 @@ const makeConfig = (_env, argv) => [
         }
       }),
       new webpack.DefinePlugin({
-        __YTAF_VERSION__: JSON.stringify(pkgJson.version)
+        __YTAF_VERSION__: JSON.stringify(pkgJson.version),
+        __PERSIAN_SUBS_SERVERS__: JSON.stringify(
+          process.env.PERSIAN_SUBS_SERVERS ?? ''
+        )
       })
     ]
   }
