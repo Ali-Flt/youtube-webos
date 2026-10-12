@@ -56,3 +56,24 @@ export async function firstAccepting(
   }
   return null;
 }
+
+export function visitTracker(): (videoId: string) => boolean {
+  let current: string | null = null;
+  return (videoId) => {
+    if (videoId === current) return false;
+    current = videoId;
+    return true;
+  };
+}
+
+export async function submitVisit(
+  videoId: string,
+  servers: readonly string[],
+  send: (server: string) => Promise<unknown>,
+  serverFor: Map<string, string>
+): Promise<string | null> {
+  const server = await firstAccepting(servers, send);
+  if (server) serverFor.set(videoId, server);
+  else serverFor.delete(videoId);
+  return server;
+}

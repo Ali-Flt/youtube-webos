@@ -1,10 +1,11 @@
 import {
   englishCaptionUrl,
-  firstAccepting,
   parseServers,
   persianCaptionVideoId,
   pickEnglishTrack,
   serverCaptionUrl,
+  submitVisit,
+  visitTracker,
   type CaptionTrack
 } from './persian-ai-core';
 import { getPlayerManager, PlayerMode } from './player_api';
@@ -41,7 +42,7 @@ const CAPTIONS_TIMEOUT_MS = 15000;
 const POLL_MS = 10000;
 
 const serverFor = new Map<VideoID, string>();
-const submitted = new Set<VideoID>();
+const isNewVisit = visitTracker();
 let player: (YTPlayer & CaptionApi) | null = null;
 let poll: ReturnType<typeof setInterval> | undefined;
 
@@ -172,21 +173,26 @@ async function submit(videoId: VideoID) {
     events: captions.events ?? []
   };
 
-  const server = await firstAccepting(SERVERS, (candidate) =>
-    request('POST', `${candidate}/v1/jobs`, SUBMIT_TIMEOUT_MS, job).catch(
-      (error: unknown) => {
-        console.warn(TAG, error);
-        throw error;
-      }
-    )
+  const server = await submitVisit(
+    videoId,
+    SERVERS,
+    (candidate) =>
+      request('POST', `${candidate}/v1/jobs`, SUBMIT_TIMEOUT_MS, job).catch(
+        (error: unknown) => {
+          console.warn(TAG, error);
+          throw error;
+        }
+      ),
+    serverFor
   );
+  const current = playerManager.currentVideoID === videoId;
   if (!server) {
     console.warn(TAG, 'no subtitle server accepted', videoId);
+    if (current && persianActive()) reloadCaptions();
     return;
   }
-  if (playerManager.currentVideoID !== videoId) return;
+  if (!current) return;
 
-  serverFor.set(videoId, server);
   if (persianActive()) reloadCaptions();
   startPolling(videoId, server);
 }
@@ -197,11 +203,9 @@ console.info(TAG, 'servers:', SERVERS);
 
 playerManager.addEventListener('playbackStart', function () {
   const videoId = this.currentVideoID;
-  if (!SERVERS.length || !videoId || submitted.has(videoId)) return;
-  if (this.playerMode !== PlayerMode.NORMAL) return;
-  submitted.add(videoId);
+  if (!SERVERS.length || !videoId) return;
+  if (this.playerMode !== PlayerMode.NORMAL || !isNewVisit(videoId)) return;
   submit(videoId).catch((error: unknown) => {
-    submitted.delete(videoId);
     console.warn(TAG, 'could not submit', videoId, error);
   });
 });

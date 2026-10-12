@@ -7,7 +7,9 @@ import {
   parseServers,
   persianCaptionVideoId,
   pickEnglishTrack,
-  serverCaptionUrl
+  serverCaptionUrl,
+  submitVisit,
+  visitTracker
 } from '../src/persian-ai-core.ts';
 
 const asr = {
@@ -110,4 +112,38 @@ test('returns null when no server accepts', async () => {
     throw new Error('refused');
   });
   assert.equal(chosen, null);
+});
+
+test('a revisit after another video is a new visit, a resume is not', () => {
+  const isNewVisit = visitTracker();
+  assert.deepEqual(
+    ['a', 'a', 'b', 'a'].map((id) => isNewVisit(id)),
+    [true, false, true, true]
+  );
+});
+
+test('remembers the server that accepted the job', async () => {
+  const serverFor = new Map();
+  const chosen = await submitVisit(
+    'v',
+    ['http://pc'],
+    async () => {},
+    serverFor
+  );
+  assert.equal(chosen, 'http://pc');
+  assert.equal(serverFor.get('v'), 'http://pc');
+});
+
+test('forgets an earlier server when no server accepts', async () => {
+  const serverFor = new Map([['v', 'http://pc']]);
+  const chosen = await submitVisit(
+    'v',
+    ['http://pc'],
+    async () => {
+      throw new Error('down');
+    },
+    serverFor
+  );
+  assert.equal(chosen, null);
+  assert.equal(serverFor.has('v'), false);
 });
