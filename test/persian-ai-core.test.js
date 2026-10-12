@@ -75,7 +75,7 @@ test('ignores other caption and non-caption requests', () => {
   );
   assert.equal(
     persianCaptionVideoId(
-      'https://www.youtube.com/youtubei/v1/player?tlang=fa'
+      'https://www.youtube.com/api/stats/qoe?v=dQw4w9WgXcQ&tlang=fa'
     ),
     null
   );
