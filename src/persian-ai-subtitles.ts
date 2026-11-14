@@ -8,6 +8,8 @@ import {
   visitTracker,
   type CaptionTrack
 } from './persian-ai-core';
+import { ResolveCommandRegistry } from './app_api/index';
+import { PERSIAN } from './persian-subtitle-row';
 import { getPlayerManager, PlayerMode } from './player_api';
 import type { VideoID, YTPlayer } from './player_api';
 
@@ -23,10 +25,18 @@ interface CaptionApi {
       }
     | undefined;
   getCurrentTime(): number;
+  loadModule(module: 'captions'): void;
+  addEventListener(type: 'captionschanged', listener: () => void): void;
+  removeEventListener(type: 'captionschanged', listener: () => void): void;
   getOption(
     module: 'captions',
     option: 'track'
   ): { translationLanguage?: { languageCode?: string } } | undefined;
+  getOption(
+    module: 'captions',
+    option: 'tracklist',
+    filter: { includeAsr: boolean }
+  ): unknown[] | undefined;
   setOption(module: 'captions', option: 'reload', value: boolean): void;
 }
 
@@ -40,6 +50,7 @@ const SERVERS = parseServers(__PERSIAN_SUBS_SERVERS__);
 const SUBMIT_TIMEOUT_MS = 3000;
 const CAPTIONS_TIMEOUT_MS = 15000;
 const POLL_MS = 10000;
+const STARTUP_MS = 3000;
 
 const serverFor = new Map<VideoID, string>();
 const isNewVisit = visitTracker();
@@ -82,6 +93,31 @@ const persianActive = () =>
 
 function reloadCaptions() {
   player?.setOption('captions', 'reload', true);
+}
+
+function showPersian() {
+  const captions = player;
+  if (!captions) return;
+  captions.loadModule('captions');
+  if (
+    !captions.getOption('captions', 'tracklist', { includeAsr: true })?.length
+  ) {
+    return;
+  }
+
+  const apply = () => {
+    if (persianActive()) return;
+    registry.dispatchCommand({
+      selectSubtitlesTrackCommand: { translationLanguage: { ...PERSIAN } }
+    });
+  };
+  apply();
+  // ponytail: the app re-applies its stored caption state ~1s after loadModule; keep Persian only through startup so later user choices win.
+  captions.addEventListener('captionschanged', apply);
+  setTimeout(
+    () => captions.removeEventListener('captionschanged', apply),
+    STARTUP_MS
+  );
 }
 
 function redirect(url: string): string {
@@ -197,15 +233,19 @@ async function submit(videoId: VideoID) {
   startPolling(videoId, server);
 }
 
+const registry = await ResolveCommandRegistry.getInstance();
 const playerManager = await getPlayerManager();
 player = playerManager.player as YTPlayer & CaptionApi;
 console.info(TAG, 'servers:', SERVERS);
 
 playerManager.addEventListener('playbackStart', function () {
   const videoId = this.currentVideoID;
-  if (!SERVERS.length || !videoId) return;
-  if (this.playerMode !== PlayerMode.NORMAL || !isNewVisit(videoId)) return;
-  submit(videoId).catch((error: unknown) => {
-    console.warn(TAG, 'could not submit', videoId, error);
-  });
+  if (!videoId || this.playerMode !== PlayerMode.NORMAL) return;
+  if (!isNewVisit(videoId)) return;
+  if (SERVERS.length) {
+    submit(videoId).catch((error: unknown) => {
+      console.warn(TAG, 'could not submit', videoId, error);
+    });
+  }
+  showPersian();
 });

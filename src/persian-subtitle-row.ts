@@ -1,6 +1,9 @@
 type Json = Record<string, unknown>;
 
-const PERSIAN = { languageCode: 'fa', languageName: 'Persian' } as const;
+export const PERSIAN = {
+  languageCode: 'fa',
+  languageName: 'Persian'
+} as const;
 
 const isObject = (value: unknown): value is Json =>
   typeof value === 'object' && value !== null;
